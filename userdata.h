@@ -53,6 +53,7 @@ struct userdata {
 	time_t auth_cachejitter;		/* number of seconds to add/remove to cache AUTH lookups TTL */
 	struct cacheentry *authcache;
 	struct cliententry *clients;
+	char append_ip_separator; /* if set to non-null, ip will be appended to userid as <append_ip_separator>1.1.1.1 before sending to backends */
 };
 
 #endif

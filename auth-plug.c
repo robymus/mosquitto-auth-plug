@@ -33,6 +33,8 @@
 #include <openssl/evp.h>
 #include <mosquitto.h>
 #include <mosquitto_plugin.h>
+#include <memory_mosq.h>
+#include <mosquitto_internal.h>
 #include <fnmatch.h>
 #include <time.h>
 
@@ -141,6 +143,7 @@ int mosquitto_auth_plugin_init(void **userdata, struct mosquitto_auth_opt *auth_
 	ud->aclcache = NULL;
 	ud->authcache = NULL;
 	ud->clients = NULL;
+	ud->append_ip_separator = 0;
 
 	/*
 	 * Shove all options Mosquitto gives the plugin into a hash,
@@ -175,6 +178,9 @@ int mosquitto_auth_plugin_init(void **userdata, struct mosquitto_auth_opt *auth_
 			}else{
 				_log(LOG_NOTICE, "Error: Invalid log_quiet value (%s).", o->value);
 			}
+		}
+		if (!strcmp(o->key, "append_ip_separator")){
+			ud->append_ip_separator = o->value[0];
 		}
 #if 0
 		if (!strcmp(o->key, "topic_prefix"))
@@ -498,18 +504,37 @@ int mosquitto_auth_security_cleanup(void *userdata, struct mosquitto_auth_opt *a
 
 
 #if MOSQ_AUTH_PLUGIN_VERSION >=3
-int mosquitto_auth_unpwd_check(void *userdata, const struct mosquitto *client, const char *username, const char *password)
+int mosquitto_auth_unpwd_check(void *userdata, const struct mosquitto *client, const char *_username, const char *password)
 #else
-int mosquitto_auth_unpwd_check(void *userdata, const char *username, const char *password)
+int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char *password)
 #endif
 {
 	struct userdata *ud = (struct userdata *)userdata;
 	struct backend_p **bep;
 	char *phash = NULL, *backend_name = NULL;
 	int match, authenticated = FALSE, nord, granted, rc, has_error = FALSE;
+	char *username;
 
-	if (!username || !*username || !password || !*password)
+	if (!_username || !*_username || !password || !*password)
 		return MOSQ_DENY_AUTH;
+
+#if MOSQ_AUTH_PLUGIN_VERSION >=3
+	if (ud->append_ip_separator) {
+		int len = strlen(_username);
+		int addr_len = strlen(client->address);
+		int maxlen = len+1+strlen(client->address);
+		username = malloc(maxlen+1);
+		strncpy(username, _username, len);
+		username[len] = ud->append_ip_separator;
+		username[len+1] = 0;
+		strncat(username, client->address, addr_len);
+	}
+	else {
+		username = strdup(_username);
+	}
+#else
+	username = strdup(_username);
+#endif
 
 	_log(LOG_DEBUG, "mosquitto_auth_unpwd_check(%s)", (username) ? username : "<nil>");
 
@@ -534,6 +559,7 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *username, const char 
 	if (granted != MOSQ_ERR_UNKNOWN) {
 		_log(LOG_DEBUG, "getuser(%s) CACHEDAUTH: %d",
 			username, (granted == MOSQ_ERR_SUCCESS) ? TRUE : FALSE);
+		free(username);
 		return granted;
 	}
 
@@ -589,6 +615,7 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *username, const char 
 		granted = MOSQ_ERR_UNKNOWN;
 	}
 	auth_cache(username, password, granted, userdata);
+	free(username);
 	return granted;
 }
 
