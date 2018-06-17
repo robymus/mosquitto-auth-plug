@@ -504,7 +504,7 @@ int mosquitto_auth_security_cleanup(void *userdata, struct mosquitto_auth_opt *a
 
 
 #if MOSQ_AUTH_PLUGIN_VERSION >=3
-int mosquitto_auth_unpwd_check(void *userdata, const struct mosquitto *client, const char *username, const char *password)
+int mosquitto_auth_unpwd_check(void *userdata, const struct mosquitto *client, const char *_username, const char *password)
 #else
 int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char *password)
 #endif
@@ -513,7 +513,8 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 	struct backend_p **bep;
 	char *phash = NULL, *backend_name = NULL;
 	int match, authenticated = FALSE, nord, granted, rc, has_error = FALSE;
-	int username_allocated = FALSE;
+	char *username;
+	int username_allocated = TRUE; /* is username allocated dynamically, so must be freed */
 
 	if (!username || !*username || !password || !*password)
 		return MOSQ_DENY_AUTH;
@@ -523,14 +524,17 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 		int len = strlen(_username);
 		int addr_len = strlen(client->address);
 		int maxlen = len+1+addr_len;
-		char *_username = (char*) malloc(maxlen+1);
-		strncpy(_username, username, len);
-		_username[len] = ud->append_ip_separator;
-		_username[len+1] = 0;
-		strncat(_username, client->address, addr_len);
-		username = _username;
-		username_allocated = TRUE;
+		username = (char*) malloc(maxlen+1);
+		strncpy(username, _username, len);
+		username[len] = ud->append_ip_separator;
+		username[len+1] = 0;
+		strncat(username, client->address, addr_len);
 	}
+	else {
+		username = strdup(_username);
+	}
+#else
+	username = strdup(_username);
 #endif
 
 	_log(LOG_DEBUG, "mosquitto_auth_unpwd_check(%s)", (username) ? username : "<nil>");
