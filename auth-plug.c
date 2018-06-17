@@ -513,27 +513,24 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 	struct backend_p **bep;
 	char *phash = NULL, *backend_name = NULL;
 	int match, authenticated = FALSE, nord, granted, rc, has_error = FALSE;
-	char *username;
+	char *username = _username;
+	int username_allocated = FALSE;
 
-	if (!_username || !*_username || !password || !*password)
+	if (!username || !*username || !password || !*password)
 		return MOSQ_DENY_AUTH;
 
 #if MOSQ_AUTH_PLUGIN_VERSION >=3
-	if (ud->append_ip_separator) {
+	if (ud->append_ip_separator && client->address != NULL) {
 		int len = strlen(_username);
 		int addr_len = strlen(client->address);
-		int maxlen = len+1+strlen(client->address);
-		username = malloc(maxlen+1);
+		int maxlen = len+1+addr_len;
+		username = (char*) malloc(maxlen+1);
 		strncpy(username, _username, len);
 		username[len] = ud->append_ip_separator;
 		username[len+1] = 0;
 		strncat(username, client->address, addr_len);
+		username_allocated = TRUE;
 	}
-	else {
-		username = strdup(_username);
-	}
-#else
-	username = strdup(_username);
 #endif
 
 	_log(LOG_DEBUG, "mosquitto_auth_unpwd_check(%s)", (username) ? username : "<nil>");
@@ -544,12 +541,24 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 	if (e) {
 		free(e->username);
 		free(e->clientid);
-		e->username = strdup(username);
+		if (username_allocated) {
+			e->username = username;
+			username_allocated = FALSE;
+		}
+		else {
+			e->username = strdup(username);
+		}
 		e->clientid = strdup("client id not available");
 	} else {
 		e = (struct cliententry *)malloc(sizeof(struct cliententry));
 		e->key = (void *)client;
-		e->username = strdup(username);
+		if (username_allocated) {
+			e->username = username;
+			username_allocated = FALSE;
+		}
+		else {
+			e->username = strdup(username);
+		}
 		e->clientid = strdup("client id not available");
 		HASH_ADD(hh, ud->clients, key, sizeof(void *), e);
 	}
@@ -559,7 +568,7 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 	if (granted != MOSQ_ERR_UNKNOWN) {
 		_log(LOG_DEBUG, "getuser(%s) CACHEDAUTH: %d",
 			username, (granted == MOSQ_ERR_SUCCESS) ? TRUE : FALSE);
-		free(username);
+		if (username_allocated) free(username);
 		return granted;
 	}
 
@@ -615,7 +624,7 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 		granted = MOSQ_ERR_UNKNOWN;
 	}
 	auth_cache(username, password, granted, userdata);
-	free(username);
+	if (username_allocated) free(username);
 	return granted;
 }
 
