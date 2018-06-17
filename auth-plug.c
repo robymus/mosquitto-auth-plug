@@ -33,8 +33,7 @@
 #include <openssl/evp.h>
 #include <mosquitto.h>
 #include <mosquitto_plugin.h>
-#include <memory_mosq.h>
-#include <mosquitto_internal.h>
+#include <mosquitto_broker.h>
 #include <fnmatch.h>
 #include <time.h>
 
@@ -514,21 +513,23 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 	char *phash = NULL, *backend_name = NULL;
 	int match, authenticated = FALSE, nord, granted, rc, has_error = FALSE;
 	char *username;
+	const char *ip_address;
 	int username_allocated = TRUE; /* is username allocated dynamically, so must be freed */
 
 	if (!_username || !*_username || !password || !*password)
 		return MOSQ_DENY_AUTH;
 
 #if MOSQ_AUTH_PLUGIN_VERSION >=3
-	if (ud->append_ip_separator && client->address != NULL) {
+	ip_address = mosquitto_client_address(client);
+	if (ud->append_ip_separator && ip_address != NULL) {
 		int len = strlen(_username);
-		int addr_len = strlen(client->address);
+		int addr_len = strlen(ip_address);
 		int maxlen = len+1+addr_len;
 		username = (char*) malloc(maxlen+1);
 		strncpy(username, _username, len);
 		username[len] = ud->append_ip_separator;
 		username[len+1] = 0;
-		strncat(username, client->address, addr_len);
+		strncat(username, ip_address, addr_len);
 	}
 	else {
 		username = strdup(_username);
