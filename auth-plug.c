@@ -516,7 +516,7 @@ int mosquitto_auth_unpwd_check(void *userdata, const char *_username, const char
 	char *username;
 	int username_allocated = TRUE; /* is username allocated dynamically, so must be freed */
 
-	if (!username || !*username || !password || !*password)
+	if (!_username || !*_username || !password || !*password)
 		return MOSQ_DENY_AUTH;
 
 #if MOSQ_AUTH_PLUGIN_VERSION >=3
